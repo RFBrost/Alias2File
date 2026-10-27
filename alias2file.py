@@ -5,6 +5,7 @@
 # Utility to convert a Mac alias file to a URL
 # --------------------------------------------------------------------------------------
 
+# Last: Modified 10/27/26  07:19:19 RFB iMac5K - report a broken alias to a missing file or folder
 # Last: Modified 10/27/26  05:58:46 RFB iMac5K - version 1.3.0
 # Last: Modified 10/27/26  05:57:18 RFB iMac5K - normal output is the path alone
 # Last: Modified 10/27/26  05:55:15 RFB iMac5K - -t sets TestMode so color codes are removed
@@ -33,7 +34,9 @@ from typing import NamedTuple
 from colors import c
 from mac_alias import Alias
 from mac_alias import Bookmark
-from mac_alias import kBookmarkPath, kBookmarkVolumePath
+from mac_alias import ALIAS_KIND_FOLDER
+from mac_alias import kBookmarkPath, kBookmarkVolumePath, kBookmarkFileProperties
+from mac_alias.bookmark import kCFURLResourceIsDirectory
 from elevate import elevate
 
 #----------------------------------------------------------------------------------------
@@ -57,8 +60,8 @@ class Args(NamedTuple):
 #   Globals
 #----------------------------------------------------------------------------------------
 
-lastUpdate: str = c.MAG+"10/27/26  05:58:46"+c.EDC
-myVersion: str = c.CYN+"1.3.0"+c.EDC
+lastUpdate: str = c.MAG+"10/27/26  07:19:19"+c.EDC
+myVersion: str = c.CYN+"1.4.0"+c.EDC
 progName: str = c.BBLK+"alias2file.py"+c.BOFF
 
 # localtime looks like "Sat May  2 20:08:04 2020"
@@ -131,6 +134,21 @@ def isClassicAlias(data: bytes) -> bool:
     _appinfo, recsize, version = struct.unpack_from(">4shh", data, 0)
     return recsize >= 150 and version in (2, 3) and len(data) >= recsize
 
+def pointsAtFolder(bookmark: Bookmark = None, classic: Alias = None) -> bool:
+    """
+    The alias record says whether the target was a folder.
+    kBookmarkFileProperties begins with the CFURL resource flags.
+    """
+    if bookmark is not None:
+        props = bookmark.get(kBookmarkFileProperties)
+        raw = getattr(props, "bytes", None)
+        if isinstance(raw, (bytes, bytearray)) and len(raw) >= 8:
+            flags: int = struct.unpack_from("<Q", raw, 0)[0]
+            return (flags & kCFURLResourceIsDirectory) != 0
+    if classic is not None:
+        return classic.target.kind == ALIAS_KIND_FOLDER
+    return False
+
 #----------------------------------------------------------------------------------------
 #   getAlias() - GET file path from an ALIAS
 #----------------------------------------------------------------------------------------
@@ -156,6 +174,8 @@ def getAlias(aliasPathName: str, debug: bool = False) -> tuple[bool,str]:
         with open(aliasPathName, "rb") as aliasFile:
             data = aliasFile.read()
 
+        bookmark = None
+        classic = None
         # Finder writes "book" / "mark" and leaves the size fields zero.
         # Bookmark.from_bytes() requires those fields.
         if data[:4] == b"book" and data[8:12] == b"mark":
@@ -164,9 +184,9 @@ def getAlias(aliasPathName: str, debug: bool = False) -> tuple[bool,str]:
             bookmark = Bookmark.from_bytes(data, debug=debug)
             target_path = bookmarkTarget(bookmark)
         elif isClassicAlias(data):
-            alias = Alias.from_bytes(data, debug=debug)
-            posix = alias.target.posix_path
-            mount = alias.volume.posix_path if alias.volume is not None else None
+            classic = Alias.from_bytes(data, debug=debug)
+            posix = classic.target.posix_path
+            mount = classic.volume.posix_path if classic.volume is not None else None
             if isinstance(posix, bytes):
                 posix = posix.decode()
             if isinstance(mount, bytes):
@@ -182,6 +202,12 @@ def getAlias(aliasPathName: str, debug: bool = False) -> tuple[bool,str]:
             logError("getAlias()-> ", c.RED,
                      "%s is a file, not an alias." % aliasPathName)
             return (success, target_path)
+
+        if target_path == "" or not os.path.exists(target_path):
+            kind: str = "folder" if pointsAtFolder(bookmark, classic) else "file"
+            logError("getAlias()-> ", c.RED,
+                     "%s is a broken alias to a %s." % (aliasPathName, kind))
+            return (success, "")
 
         success = True
         if verbosity > 1:

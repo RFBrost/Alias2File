@@ -4,6 +4,7 @@
 # The result stays in a shell variable. No capture file is written.
 # --------------------------------------------------------------------------------------
 
+# Last: Modified 10/27/26  07:30:29 RFB iMac5K - check AMissingFile alias and AMissingFolder alias
 # Last: Modified 10/27/26  05:57:18 RFB iMac5K - expect the path alone
 # Last: Modified 10/27/26  05:31:57 RFB iMac5K - use shell constants for status and color
 # --------------------------------------------------------------------------------------
@@ -46,6 +47,12 @@ check "test/AFile" \
 
 check "test/AFolder" \
     $'\n*** getAlias()->test/AFolder is a folder, not an alias.\n'
+
+check "test/AMissingFile alias" \
+    $'\n*** getAlias()->test/AMissingFile alias is a broken alias to a file.\n'
+
+check "test/AMissingFolder alias" \
+    $'\n*** getAlias()->test/AMissingFolder alias is a broken alias to a folder.\n'
 
 if [ "$failures" -ne 0 ]; then
     exit $SHELL_BAD

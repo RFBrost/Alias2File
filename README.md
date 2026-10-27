@@ -16,7 +16,7 @@ look up the target of an **alias** [^1]
 
 `<alias file name>` is a Finder alias or an older Alias record. A relative path is accepted. A plain file prints `<file> is a file, not an alias.` A plain folder prints `<folder> is a folder, not an alias.`
 
-`-t` leaves the color codes out. `test/test.sh` runs `alias2file -t` on the aliases in `test/` and compares each result to a known string.
+`-t` leaves the color codes out.
 
 **positional arguments:**
 ```
@@ -40,6 +40,17 @@ look up the target of an **alias** [^1]
 The companion program is **file2alias**, which writes an alias in the current directory.
 
 A Finder alias made since Mac OS X 10.6 is a bookmark in a `book`/`mark` file. An older Alias record has no `book`/`mark` header. `-v` says which one was read.
+
+**tests:**
+
+```
+cd ~/SOFTWARE/PYTHON/Alias2File
+./test/test.sh
+```
+
+`test/test.sh` runs `alias2file -t` on the files in `test/` and compares each result to a known string. A match prints `Success.` A mismatch prints `FAILED!` The script exits `$SHELL_GOOD` when every comparison matches and `$SHELL_BAD` when one does not.
+
+The checks are `AFile alias`, `AFolder alias`, the plain file `AFile`, the plain folder `AFolder`, `AMissingFile alias`, and `AMissingFolder alias`.
 
 ---
 [^1]: A link in ~/SOFTWARE/bin exists which points alias2file -> ~/SOFTWARE/PYTHON/Alias2File/alias2file.py
