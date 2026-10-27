@@ -4,9 +4,9 @@
 # The result stays in a shell variable. No capture file is written.
 # --------------------------------------------------------------------------------------
 
-# Last: Modified 10/27/26  07:30:29 RFB iMac5K - check AMissingFile alias and AMissingFolder alias
-# Last: Modified 10/27/26  05:57:18 RFB iMac5K - expect the path alone
-# Last: Modified 10/27/26  05:31:57 RFB iMac5K - use shell constants for status and color
+# Last: Modified 10/27/26  07:30:29 check AMissingFile alias and AMissingFolder alias
+# Last: Modified 10/27/26  05:57:18 expect the path alone
+# Last: Modified 10/27/26  05:31:57 use shell constants for status and color
 # --------------------------------------------------------------------------------------
 # GLOBAL CONSTANTS: $SHELL_GOOD, $SHELL_BAD -- from ~/.bash_const
 # GLOBAL CONSTANTS: $BRED, $BGREEN -- from ~/.bash_colors
@@ -56,5 +56,6 @@ check "test/AMissingFolder alias" \
 
 if [ "$failures" -ne 0 ]; then
     exit $SHELL_BAD
-fi
+fi  # end of if [ "$failures" -ne 0 ];
+
 exit $SHELL_GOOD
