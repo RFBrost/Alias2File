@@ -9,12 +9,14 @@
 ```
 alias2file [-h|-H] [-V]
 
-alias2file [-v] [-q|-Q] [-s|-S] [-u user name] [-g group name] <alias file name>
+alias2file [-v] [-t|-T] [-q|-Q] [-s|-S] [-u user name] [-g group name] <alias file name>
 ```
 
 look up the target of an **alias** [^1]
 
-`<alias file name>` may be a Finder alias or a real directory. A directory has no alias bytes, so the program reports that directory's own path. A relative path is accepted.
+`<alias file name>` is a Finder alias or an older Alias record. A relative path is accepted. A plain file prints `<file> is a file, not an alias.` A plain folder prints `<folder> is a folder, not an alias.`
+
+`-t` leaves the color codes out. `test/test.sh` runs `alias2file -t` on the aliases in `test/` and compares each result to a known string.
 
 **positional arguments:**
 ```
@@ -25,6 +27,7 @@ look up the target of an **alias** [^1]
   -h, -H, --help        show this help message and exit
   -V, --version         show program's version number and exit
   -v, --verbose         verbose invocation. Also prints the bookmark, or a classic Alias record
+  -t, -T, --test        test mode. Color codes are left out of the messages
   -q, -Q, --quiet       quiet invocation
   -u, --user USER       user name (rfbrost)
   -g, --group GROUP     group name (Family)

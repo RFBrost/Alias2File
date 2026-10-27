@@ -5,8 +5,11 @@
 # Utility to convert a Mac alias file to a URL
 # --------------------------------------------------------------------------------------
 
+# Last: Modified 10/27/26  05:58:46 RFB iMac5K - version 1.3.0
+# Last: Modified 10/27/26  05:57:18 RFB iMac5K - normal output is the path alone
+# Last: Modified 10/27/26  05:55:15 RFB iMac5K - -t sets TestMode so color codes are removed
+# Last: Modified 10/27/26  05:19:30 RFB iMac5K - test mode prints without color codes
 # Last: Created  08/17/25  04:21:51 RFB - Created
-# Last: Modified 10/27/26  03:45:00 RFB iMac5K - classic Alias records print when debug is on
 # --------------------------------------------------------------------------------------
 
 """
@@ -24,6 +27,7 @@ import string
 import argparse
 #from argparse import ArgumentParser
 import struct
+import re
 from Foundation import NSURL
 from typing import NamedTuple
 from colors import c
@@ -39,6 +43,7 @@ from elevate import elevate
 class Args(NamedTuple):
     verbose: int
     quiet: bool
+    testMode: bool
     user: str
     group: str
     superuser: bool
@@ -52,8 +57,8 @@ class Args(NamedTuple):
 #   Globals
 #----------------------------------------------------------------------------------------
 
-lastUpdate: str = c.MAG+"10/27/26  03:45:00"+c.EDC
-myVersion: str = c.CYN+"1.1.0"+c.EDC
+lastUpdate: str = c.MAG+"10/27/26  05:58:46"+c.EDC
+myVersion: str = c.CYN+"1.3.0"+c.EDC
 progName: str = c.BBLK+"alias2file.py"+c.BOFF
 
 # localtime looks like "Sat May  2 20:08:04 2020"
@@ -64,6 +69,9 @@ localtime: str = c.BLU+'('+localtime1+')'+c.EDC
 versionDesc: str ="\n"+progName+" "+lastUpdate+" "+myVersion+" "+localtime+"\n"
 
 verbosity: int = 0   # Anything greater than zero outputs debug messages
+TestMode: bool = False
+# CSI color sequences, including ESC [ m and ESC [ 1;31 m.
+_colorCode = re.compile(r"\x1b\[[0-9;]*m")
 bootVolume: str = os.environ["BOOTVOL"]
 homeVolume: str = os.environ["HOMEVOL"]
 uName: str = os.getlogin()
@@ -111,6 +119,19 @@ def bookmarkTarget(bookmark: Bookmark) -> str:
     return on_volume
 
 #----------------------------------------------------------------------------------------
+#   isClassicAlias() - true when the bytes are an older Alias record
+#----------------------------------------------------------------------------------------
+
+def isClassicAlias(data: bytes) -> bool:
+    """
+    A classic Alias record is big-endian, at least 150 bytes, version 2 or 3.
+    """
+    if len(data) < 150:
+        return False
+    _appinfo, recsize, version = struct.unpack_from(">4shh", data, 0)
+    return recsize >= 150 and version in (2, 3) and len(data) >= recsize
+
+#----------------------------------------------------------------------------------------
 #   getAlias() - GET file path from an ALIAS
 #----------------------------------------------------------------------------------------
 
@@ -118,8 +139,8 @@ def getAlias(aliasPathName: str, debug: bool = False) -> tuple[bool,str]:
     """
     GET file path from an ALIAS.
 
-    A directory has no alias bytes to read. Bookmark.for_file() accepts a
-    directory, which is what the mac_alias tests do with /Applications.
+    A Finder alias is a book/mark file. An older Alias record has no book/mark
+    header. A plain file or folder is not an alias.
 
     debug=True asks mac_alias to print the decoded bookmark or alias record.
     The default is False, so a normal call stays quiet.
@@ -128,35 +149,39 @@ def getAlias(aliasPathName: str, debug: bool = False) -> tuple[bool,str]:
     target_path: str = ""
     try:
         if os.path.isdir(aliasPathName):
-            bookmark = Bookmark.for_file(os.path.abspath(aliasPathName))
-            target_path = bookmarkTarget(bookmark)
-        else:
-            with open(aliasPathName, "rb") as aliasFile:
-                data = aliasFile.read()
+            logError("getAlias()-> ", c.RED,
+                     "%s is a folder, not an alias." % aliasPathName)
+            return (success, target_path)
 
-            # Finder writes "book" / "mark" and leaves the size fields zero.
-            # Bookmark.from_bytes() requires those fields.
-            if data[:4] == b"book" and data[8:12] == b"mark":
-                hdrsize = struct.unpack_from("<I", data, 16)[0]
-                data = struct.pack("<4sIII", b"book", len(data), 0x10040000, hdrsize) + data[16:]
-                bookmark = Bookmark.from_bytes(data, debug=debug)
-                target_path = bookmarkTarget(bookmark)
+        with open(aliasPathName, "rb") as aliasFile:
+            data = aliasFile.read()
+
+        # Finder writes "book" / "mark" and leaves the size fields zero.
+        # Bookmark.from_bytes() requires those fields.
+        if data[:4] == b"book" and data[8:12] == b"mark":
+            hdrsize = struct.unpack_from("<I", data, 16)[0]
+            data = struct.pack("<4sIII", b"book", len(data), 0x10040000, hdrsize) + data[16:]
+            bookmark = Bookmark.from_bytes(data, debug=debug)
+            target_path = bookmarkTarget(bookmark)
+        elif isClassicAlias(data):
+            alias = Alias.from_bytes(data, debug=debug)
+            posix = alias.target.posix_path
+            mount = alias.volume.posix_path if alias.volume is not None else None
+            if isinstance(posix, bytes):
+                posix = posix.decode()
+            if isinstance(mount, bytes):
+                mount = mount.decode()
+            # The classic record stores the path relative to its volume.
+            if mount and posix:
+                relative = posix[1:] if posix.startswith(os.sep) else posix
+                on_volume = os.path.join(mount, relative)
+                target_path = on_volume if os.path.exists(on_volume) else posix
             else:
-                # A file that is not book/mark is the older Alias record.
-                alias = Alias.from_bytes(data, debug=debug)
-                posix = alias.target.posix_path
-                mount = alias.volume.posix_path if alias.volume is not None else None
-                if isinstance(posix, bytes):
-                    posix = posix.decode()
-                if isinstance(mount, bytes):
-                    mount = mount.decode()
-                # The classic record stores the path relative to its volume.
-                if mount and posix:
-                    relative = posix[1:] if posix.startswith(os.sep) else posix
-                    on_volume = os.path.join(mount, relative)
-                    target_path = on_volume if os.path.exists(on_volume) else posix
-                else:
-                    target_path = posix or ""
+                target_path = posix or ""
+        else:
+            logError("getAlias()-> ", c.RED,
+                     "%s is a file, not an alias." % aliasPathName)
+            return (success, target_path)
 
         success = True
         if verbosity > 1:
@@ -188,11 +213,13 @@ def logError(msg1: str, *msg2:str, suppress:bool=False)-> None:
         myString+=s
 
     if suppress:    # For run message, suppress counting and additions to message
-        print(("%s%s"+c.EDC) % (msg1.strip(), myString.strip()), file=sys.stderr, sep='', end='\n')
+        message = ("%s%s"+c.EDC) % (msg1.strip(), myString.strip())
     else:
         # Eliminate Bright Red and "***" for informational messages
-        print((c.BRED+"\n*** %s"+c.EDC+"%s"+c.EDC) % (msg1.strip(), myString.strip()), file=sys.stderr, \
-            sep='', end='\n')
+        message = (c.BRED+"\n*** %s"+c.EDC+"%s"+c.EDC) % (msg1.strip(), myString.strip())
+    if TestMode:
+        message = _colorCode.sub("", message)
+    print(message, file=sys.stderr, sep='', end='\n')
     return
 
 #----------------------------------------------------------------------------------------
@@ -202,7 +229,7 @@ def logError(msg1: str, *msg2:str, suppress:bool=False)-> None:
 
 def main() -> None:
     
-    global verbosity, bootVolume, homeVolume, uName, gName
+    global verbosity, bootVolume, homeVolume, uName, gName, TestMode
     
     if verbosity > 0:
         logError("\nmain()-> ", c.GRN+"bootVolume: "+c.BLU+bootVolume, suppress=True)
@@ -217,7 +244,7 @@ def main() -> None:
     #   add_help=True, allow_abbrev=True)
     parser: argparse.ArgumentParser = argparse.ArgumentParser(prog=progName, argument_default=0, \
         usage=c.BBLK+'\n     %(prog)s '+c.BYEL+'[-h|-H] '+c.BCYN+'[-V] \n'+\
-        c.BBLK+'     %(prog)s '+c.BMAG+'[-vv] '+c.BRED+'[-s|-S] '+\
+        c.BBLK+'     %(prog)s '+c.BMAG+'[-vv] '+c.BWHT+'[-t|-T] '+c.BRED+'[-s|-S] '+\
         c.BBLU+'[-u '+c.RBLU+'user name'+c.ROFF+'] '+\
         c.BGRN+'[-g '+c.RGRN+'group name'+c.ROFF+'] '+\
         c.BMAG+'<'+c.RMAG+'alias file name'+c.ROFF+'>'+c.EDC, \
@@ -238,6 +265,9 @@ def main() -> None:
     parser.add_argument('-v', '--verbose', action='count', default=0, \
         help=c.BMAG+'verbose invocation'+c.EDC)
      
+    parser.add_argument('-t', '-T', '--test', dest='testMode', action='store_true', default=False, \
+        help=c.BWHT+'test mode'+c.EDC)
+
     parser.add_argument('-q', '-Q', '--quiet', action='store_true', default=False, \
         help=c.BCYN+'quiet invocation'+c.EDC)
    
@@ -256,6 +286,7 @@ def main() -> None:
     #args: Args = Args(**parser.parse_args().__dict__)
     args: Args = Args(**{k: v for k, v in parser.parse_args().__dict__.items() if k in Args._fields})
     verbosity = verbosity + args.verbose
+    TestMode = args.testMode
     superUser: bool = args.superuser
     userName: str = args.user
     groupName: str = args.group
@@ -276,7 +307,8 @@ def main() -> None:
         
     fileName: str = ""
     success,fileName = getAlias(aliasName, debug=(verbosity > 0))
-    logError("main()-> ", c.GRN+"fileName = ", c.BLU, "%s" % fileName, suppress=True)
+    if fileName != "":
+        logError("", c.BLU, "%s" % fileName, suppress=True)
     os.sync()
     sys.exit(0)
     

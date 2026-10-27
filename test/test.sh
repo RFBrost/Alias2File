@@ -4,6 +4,7 @@
 # The result stays in a shell variable. No capture file is written.
 # --------------------------------------------------------------------------------------
 
+# Last: Modified 10/27/26  05:57:18 RFB iMac5K - expect the path alone
 # Last: Modified 10/27/26  05:31:57 RFB iMac5K - use shell constants for status and color
 # --------------------------------------------------------------------------------------
 # GLOBAL CONSTANTS: $SHELL_GOOD, $SHELL_BAD -- from ~/.bash_const
@@ -35,16 +36,16 @@ check() {
 }
 
 check "test/AFile alias" \
-    $'main()->fileName = /Volumes/8TB-Mojave3/Users/rfbrost/SOFTWARE/PYTHON/Alias2File/test/AFile\n'
+    $'/Volumes/8TB-Mojave3/Users/rfbrost/SOFTWARE/PYTHON/Alias2File/test/AFile\n'
 
 check "test/AFolder alias" \
-    $'main()->fileName = /Volumes/8TB-Mojave3/Users/rfbrost/SOFTWARE/PYTHON/Alias2File/test/AFolder\n'
+    $'/Volumes/8TB-Mojave3/Users/rfbrost/SOFTWARE/PYTHON/Alias2File/test/AFolder\n'
 
 check "test/AFile" \
-    $'\n*** getAlias()->test/AFile is a file, not an alias.\nmain()->fileName = \n'
+    $'\n*** getAlias()->test/AFile is a file, not an alias.\n'
 
 check "test/AFolder" \
-    $'\n*** getAlias()->test/AFolder is a folder, not an alias.\nmain()->fileName = \n'
+    $'\n*** getAlias()->test/AFolder is a folder, not an alias.\n'
 
 if [ "$failures" -ne 0 ]; then
     exit $SHELL_BAD
